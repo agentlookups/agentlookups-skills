@@ -1,0 +1,25 @@
+{
+  "name": "agentlookups",
+  "description": "Public-record lookups for agents, free during beta: contractor licenses, drug prices, Maryland property assessments, environmental records, and US law text",
+  "version": "0.3.0",
+  "author": {
+    "name": "TopHat Monkey Software LLC",
+    "email": "support@agentlookups.ai"
+  },
+  "homepage": "https://agentlookups.ai",
+  "license": "MIT",
+  "keywords": [
+    "public-records",
+    "due-diligence",
+    "contractor-license",
+    "drug-prices",
+    "property-assessment",
+    "environmental",
+    "law"
+  ],
+  "repository": "https://github.com/agentlookups/agentlookups-skills",
+  "privacyPolicyUrl": "https://agentlookups.ai/privacy/",
+  "termsOfServiceUrl": "https://agentlookups.ai/terms/",
+  "documentationUrl": "https://agentlookups.ai/docs/",
+  "icon": "assets/icon.svg"
+}

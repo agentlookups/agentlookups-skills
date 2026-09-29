@@ -1,0 +1,17 @@
+{
+  "name": "agentlookups",
+  "owner": {
+    "name": "TopHat Monkey Software LLC",
+    "email": "support@agentlookups.ai"
+  },
+  "metadata": {
+    "description": "Public-record lookups from agentlookups.ai, free during beta"
+  },
+  "plugins": [
+    {
+      "name": "agentlookups",
+      "source": "./",
+      "description": "Public-record lookups, free during beta: contractor licenses, drug prices, Maryland property assessments, environmental records, and US law text"
+    }
+  ]
+}

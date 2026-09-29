@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "plumbline": { "type": "http", "url": "https://contractors.agentlookups.ai/mcp" },
+    "counterscript": { "type": "http", "url": "https://rx.agentlookups.ai/mcp" },
+    "groundtruth": { "type": "http", "url": "https://env.agentlookups.ai/mcp" },
+    "overassessed": { "type": "http", "url": "https://overassessed.agentlookups.ai/mcp" },
+    "groundrules": { "type": "http", "url": "https://law.agentlookups.ai/mcp" }
+  }
+}
