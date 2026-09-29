@@ -1,7 +1,7 @@
 {
   "name": "agentlookups",
   "description": "Public-record lookups for agents, free during beta: contractor licenses, drug prices, Maryland property assessments, environmental records, and US law text",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "author": {
     "name": "TopHat Monkey Software LLC",
     "email": "support@agentlookups.ai"

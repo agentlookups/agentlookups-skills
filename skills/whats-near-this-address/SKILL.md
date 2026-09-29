@@ -222,9 +222,11 @@ Castro St, Mountain View, CA scored every layer but `crime` and had no
 "Superfund/toxic-release proximity: national (EPA NPL + TRI, all US). Other
 environmental layers (groundwater, flood/fire/quake zones, air, noise,
 walkability): CA/Bay Area. Schools: all 50 states and DC (2023-2025 results).
-Climate (pleasant_days): CONUS, 4km (no AK/HI). Crime: SF, Oakland, Chicago
-incident feeds only. Scores are 0-1 with 1.0 = favorable; null = cannot score this
-point."
+Climate (pleasant_days): CONUS (gridMET 4km, 2015-2024); Alaska, the Florida Keys,
+Hawaii, Puerto Rico and the US Virgin Islands (Daymet V4, 2011-2020); within 40 km
+of 3 NOAA weather stations in American Samoa, the Northern Mariana Islands and
+Guam (2016-2025); null elsewhere. Crime: SF, Oakland, Chicago incident feeds only.
+Scores are 0-1 with 1.0 = favorable; null = cannot score this point."
 
 A relay of the school and crime layers for this address:
 
