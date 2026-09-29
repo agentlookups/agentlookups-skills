@@ -118,13 +118,18 @@ never "clean". Categories cap at 25 records; when a cap bites, a
 `truncation.<category>` object reports shown vs total_within_radius, so never
 present a capped list as complete.
 
-Check the inputs yourself; do not count on the service to reject bad ones:
+Bad input gets an error, not a result (observed 2026-09-29: HTTP 400 with an
+`error` field over REST, `isError` with the same text over MCP). Fix the input and
+retry; an error is not a finding about any place.
 
-- Keep `radius_km` at 50 or below, and read `query.RadiusKM` back from the response.
-  That is the radius actually searched; report that one, not the one you sent.
-- When you pass `lat`/`lon`, check them first: latitude between -90 and 90,
-  longitude between -180 and 180, and a point inside the US. A response to
-  impossible coordinates is not a finding about any place.
+- `radius_km` must be more than 0 and at most 50: 80 got "radius_km must be more
+  than 0 and at most 50 (default 10); got 80". Read `query.RadiusKM` back from the
+  response; that is the radius actually searched.
+- Impossible or foreign coordinates get "lat must be between -90 and 90; got 999"
+  or "lat/lon must be in the 50 states, DC, PR, VI, Guam, NMI or American Samoa;
+  got 51.5,-0.12". Send `address` or `lat`/`lon`, not both ("send either address
+  or lat and lon, not both"). The check is a coarse box: a point in Tijuana,
+  Mexico passed it and got San Diego records, so confirm the point is the rental.
 
 MCP equivalent (the tool also takes `address`):
 
@@ -271,9 +276,10 @@ Address goes as the roll writes it (street only, no city, no unit numbers); zip
 recommended. Returns `parcel` (with `account_id`), a `uniformity` block with a
 `Branch` of `fair` / `review` / `elevated` / `insufficient`, a `plain` verdict
 (`headline` and `body`), `appeals` (Maryland's windows with official filing links;
-relay the `window_*` strings as written), and `honesty`. HTTP 300 with
-`multiple_matches` means several parcels share the address; re-query with
-`acct=<ACCOUNT_ID>`.
+relay the `window_*` strings as written), `honesty`, and `roll`, whose `as_of` is
+the date the state last updated the roll (2026-09-04, observed 2026-09-29); give
+that date with the verdict. HTTP 300 with `multiple_matches` means several parcels
+share the address; re-query with `acct=<ACCOUNT_ID>`.
 
 Hand the human `https://overassessed.agentlookups.ai/packet?acct=<ACCOUNT_ID>` (a
 print-ready evidence packet) only when the branch is `review` or `elevated`, or
@@ -310,8 +316,8 @@ and led with Md. Code, Real Property § 8–203.
 From the services' own llms.txt files and responses, fetched live 2026-09-28. These
 travel with your answer.
 
-GroundTruth (llms.txt):
-- "We publish records with dates and distances. Category scores are model estimates, not safety ratings."
+GroundTruth (llms.txt, fetched 2026-09-29):
+- "We publish records with dates and distances, never a safety score."
 - "Absence of records is NEVER a clean bill of health."
 - "Due-diligence layers return null where they cannot score; an honest no-data beats a made-up score, and a null is never coerced to a number."
 - "TRI figures are lawful self-reported releases; quantity is not toxicity."

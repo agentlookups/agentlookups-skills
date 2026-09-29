@@ -85,14 +85,18 @@ clean bill of health. Categories cap at 25 records; when a cap bites, a
 truncation object reports shown versus total_within_radius, so never
 present a capped list as complete.
 
-Guard the inputs yourself:
+Bad input gets an error, not a result (as of 2026-09-29: HTTP 400 with
+an error field over REST, isError with the same text over MCP). Fix the
+input and retry; an error is not "no records".
 
-- Keep radius_km at 50 or below, and read query.RadiusKM back from the
-  response before saying what radius you searched. As of 2026-09-28 a
-  larger value came back as RadiusKM 10, with no error.
-- If you send lat and lon, check them first: latitude between -90 and
-  90, and US longitudes are negative. As of 2026-09-28, lat=91 returned
-  empty lists with no error, which reads like "no records".
+- radius_km must be more than 0 and at most 50. A larger value got
+  "radius_km must be more than 0 and at most 50 (default 10); got 80".
+  Read query.RadiusKM back before saying what radius you searched.
+- lat=91 got "lat must be between -90 and 90; got 91", and a point
+  outside the US got "lat/lon must be in the 50 states, DC, PR, VI,
+  Guam, NMI or American Samoa". Send address or lat and lon, not both.
+  The check is a coarse box: a point in Tijuana, Mexico passed it and
+  got San Diego records, so confirm the point is the listing.
 
 As of 2026-09-28 the example returned no Superfund or toxic-release
 records within 5 km (both null), four enforcement-flagged facilities
@@ -104,9 +108,9 @@ records within 5 km (both null), four enforcement-flagged facilities
 GET https://env.agentlookups.ai/v1/water?state=MD&county=Howard
 ```
 
-Give state as a two-letter code. As of 2026-09-28, state=Maryland
-returned water_systems null rather than an error, which reads like "no
-systems". Returns the 10 largest matching systems with
+Give state as a two-letter code. As of 2026-09-29, state=Maryland got
+HTTP 400 with the error `state must be a two-letter code such as MD;
+got "Maryland"`. Returns the 10 largest matching systems with
 population_served, health_based_violations_5y, open_violations, and
 recent_violations when there are any; a truncation object reports the
 full match count when more than 10 match. The system serving the listing
@@ -162,17 +166,23 @@ GET https://overassessed.agentlookups.ai/v1/check?address=<STREET AS THE ROLL WR
 
 Write the street the way the roll does (number and street name, no
 city, no unit), and include the zip. An error reading "no parcel matched
-that address; include the zip, and write it as the assessment roll does
-(e.g. 1 STATE CIR)" (HTTP 404 over REST, an error field over MCP) means
-rewrite the street, not that the parcel is missing. As of 2026-09-28 the
-example office, sent as 3430 COURT HOUSE DR with zip 21043, returned
-that error; the Maryland State House, 1 STATE CIR with zip 21401,
-matched account 020600002182004.
+that address in that zip; write the street as the assessment roll does
+(e.g. 1 STATE CIR), with no unit, city or state, and check that the zip
+is the one the roll records for the parcel" (HTTP 404 over REST, an
+error field over MCP) means rewrite the street or check the zip, not
+that the parcel is missing. As of 2026-09-29 the example office, sent as
+3430 COURT HOUSE DR with zip 21043, returned that error; the Maryland
+State House, 1 STATE CIR with zip 21401, matched account
+020600002182004. A zip outside Maryland gets "that zip is outside
+Maryland; Overassessed covers Maryland only, from the state's own
+assessment roll (SDAT)".
 
 Returns the SDAT parcel record (with parcel.account_id), a uniformity
 analysis with a verdict branch (fair, review, elevated, or
 insufficient), a plain-language verdict, Maryland's appeal windows with
-official filing links, and honesty notes. The API returns HTTP 300 with
+official filing links, honesty notes, and a roll object whose as_of is
+the date the state last updated the roll (2026-09-04 on 2026-09-29);
+give that date with the verdict. The API returns HTTP 300 with
 multiple_matches when several parcels share an address; re-query with
 acct=<ACCOUNT_ID>.
 
@@ -311,8 +321,7 @@ Contractor checks (Plumbline):
   lookups to screen people.
 
 Environmental records and layers (GroundTruth):
-- "We publish records with dates and distances. Category scores are
-  model estimates, not safety ratings."
+- "We publish records with dates and distances, never a safety score."
 - "Absence of records is NEVER a clean bill of health."
 - "Due-diligence layers return null where they cannot score; an honest
   no-data beats a made-up score, and a null is never coerced to a

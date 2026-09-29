@@ -13,10 +13,11 @@ the state's own roll ("SDAT, 2.4M parcels, refreshed monthly", per its llms.txt)
 says where the home stands, and gives Maryland's appeal windows and filing links.
 It is free during beta, needs no account and no key, and is read-only; its home page
 says "Currently free in beta. Features and pricing may change." It stores no owner
-names and takes no name search. Every example below was run live on 2026-09-28 and
-returned the shape shown; the roll refreshes monthly, so numbers can drift. Normal use
-is a few lookups per question. Its docs say "Rate limits apply."; a burst of 30
-parallel calls drew HTTP 429 on 9 of them (2026-09-28), so slow down if you see it.
+names and takes no name search. Every example below was run live on 2026-09-28, and
+those dated 2026-09-29 were rerun that day, returning the shape shown. The roll
+refreshes monthly, so numbers can drift. Normal use is a few lookups per question.
+Its docs say "Rate limits apply."; a burst of 30 parallel calls drew HTTP 429 on 9 of
+them (2026-09-28), so slow down if you see it.
 
 This skill covers the assessment question alone, whoever asks it. If the user wants
 the full set of checks on a house they are buying, renting, or listing, use
@@ -57,8 +58,10 @@ A no-match proves nothing.
 - **A property outside Maryland.** Say "Overassessed covers Maryland only" and stop;
   point to that county's assessor. Do not run the check anyway: without a zip, an
   address outside Maryland can match a Maryland parcel with the same street string.
-  Observed 2026-09-28: `1600 PENNSYLVANIA AVE`, the White House's street address, sent
-  with no zip, matched a parcel in Baltimore City.
+  Observed 2026-09-28 and again 2026-09-29: `1600 PENNSYLVANIA AVE`, the White
+  House's street address, sent with no zip, matched a parcel in Baltimore City. With
+  its zip, 20500, it got HTTP 404 and "that zip is outside Maryland; Overassessed
+  covers Maryland only, from the state's own assessment roll (SDAT)" (2026-09-29).
 - **Anything about a person**: who owns a house, what someone owns. Never add an owner
   name from another source. The shared terms, verbatim: "This is not a consumer report
   under the Fair Credit Reporting Act or any state consumer-reporting law. Do not use
@@ -80,12 +83,13 @@ A no-match proves nothing.
 MCP: `https://overassessed.agentlookups.ai/mcp` (Streamable HTTP, no auth; server
 `overassessed` in this plugin). One read-only tool, `check_assessment`, titled "Check
 fairness of a Maryland property assessment", with three optional string arguments,
-described by `tools/list` as: `address` "Street address in the form the roll uses,
-e.g. 1 STATE CIR, without unit number or city"; `zip` "5-digit zip; optional, but the
-same street address occurs in several Maryland towns, and a zip narrows the match";
-`acct` "SDAT account id, as returned in parcel.account_id or in a multiple_matches
-result; when present it takes precedence over address". A bare `tools/call` works
-without `initialize`:
+described by `tools/list` as (2026-09-29): `address` "Street address in the form the
+roll uses, e.g. 1 STATE CIR, without unit number or city"; `zip` "5-digit zip; a
+ZIP+4 is read as its first five digits. Optional, but the same street address occurs
+in several Maryland towns, and a zip narrows the match"; `acct` "SDAT account id,
+letters and digits with no dashes or spaces (e.g. 04121302001), as returned in
+parcel.account_id or in a multiple_matches result; when present it takes precedence
+over address". A bare `tools/call` works without `initialize`:
 
 ```
 curl -sS -X POST https://overassessed.agentlookups.ai/mcp \
@@ -122,7 +126,7 @@ sample address (substitute the user's street and zip):
 GET https://overassessed.agentlookups.ai/v1/check?address=1+STATE+CIR&zip=21401
 ```
 
-HTTP 200 with five keys:
+HTTP 200 with six keys (2026-09-29):
 
 - `parcel`: `account_id` ("020600002182004" here), `address`, `city`, `county`, `zip`,
   `market_value` (full market value, "what an appeal argues about" per the verdict
@@ -131,16 +135,25 @@ HTTP 200 with five keys:
   reassessed January 2024"). No owner field.
 - `uniformity`: `Branch`, `BandSize` (similar homes found), `PctFMV` (percent of them
   assessed lower), `MedianFMV`, `MedianSalesRatio`, `RatioSales` (sales behind that
-  ratio), `COD`, and more. Here: `Branch` "insufficient", `BandSize` 14, every other
-  number 0. Per `tools/list`, insufficient "means fewer than 25 similar homes exist for
-  a fair comparison, which is no finding either way."
+  ratio), `RatioFromYear` and `RatioToYear` (the first and last years of the sales
+  window, 2024 and 2026 here), `COD`, and more. Here: `Branch` "insufficient",
+  `BandSize` 14, the two years set, every other number 0. Per `tools/list`,
+  insufficient "means fewer than 25 similar homes exist for a fair comparison, which
+  is no finding either way."
+- `roll`: the roll's dates. Here `{"as_of": "2026-09-04", "overdue": false}`. Per
+  `tools/list`, "as_of is the date the state last updated the roll and pulled is the
+  date this copy was taken (both YYYY-MM-DD), overdue is true when this copy is more
+  than 35 days old, and a field the server does not know is left out." `pulled` was
+  left out on 2026-09-29.
 - `plain`: sentences to relay (step 3). `appeals`: windows and links (step 4).
   `honesty`: two sentences to relay verbatim.
 
 `GET https://overassessed.agentlookups.ai/v1/check?acct=020600002182004` returns the
-same record. `acct` takes the id exactly as the service printed it, digits only; a
-dashed form did not match. Before relaying, check that `parcel.city`, `county`, and
-`zip` match the home the user meant.
+same record. `acct` takes the id exactly as the service printed it. A dashed form
+(`acct=02-06-00002182004`) got HTTP 400: "acct is not an SDAT account id: an id is
+letters and digits only, with no dashes or spaces, as parcel.account_id or a
+multiple_matches result prints it (e.g. 04121302001)". Before relaying, check that
+`parcel.city`, `county`, and `zip` match the home the user meant.
 
 Other outcomes:
 
@@ -148,7 +161,8 @@ Other outcomes:
   `GET https://overassessed.agentlookups.ai/v1/check?address=100+MAIN+ST` (no zip)
   returned 10 parcels in towns across the state, each with `account_id`, `address`,
   `city`, `zip`, `land_use`, `market_value`, `sqft`, `year_built`, and a `hint`:
-  "several parcels share this address; re-query with acct=<account_id>". Show the user
+  "several parcels share this address; re-query with acct=<account_id>". The same
+  `roll` object comes with the list (2026-09-29). Show the user
   city, zip, land use, size, and year built; ask which is theirs; re-query with
   `acct=`. Condo buildings return this even with the zip, since units share the street
   address and the list shows no unit numbers. In the words of `tools/list`, the list
@@ -162,11 +176,16 @@ Other outcomes:
   2026-09-28; a later spot check of 9 units the same day agreed) came back
   `insufficient` with `BandSize` 0. Tell a condo owner this before they hunt for their
   unit; the appeal windows and the SDAT record still apply.
-- **HTTP 404, `error`**: "no parcel matched that address; include the zip, and write it
-  as the assessment roll does (e.g. 1 STATE CIR)". Rewrite per step 1 and retry. An
-  `acct=` that matches nothing returns the same text, although no address was sent;
-  then recheck the account digits. A no-match says nothing about the home or its
-  assessment.
+- **HTTP 404, `error`** (texts as of 2026-09-29): with no zip, "no parcel matched
+  that address; include the zip, and write it as the assessment roll does (e.g. 1
+  STATE CIR)"; with a zip, "no parcel matched that address in that zip; write the
+  street as the assessment roll does (e.g. 1 STATE CIR), with no unit, city or state,
+  and check that the zip is the one the roll records for the parcel". Rewrite per
+  step 1 and retry. An `acct=` that matches nothing gets "no parcel on the roll has
+  that account id; ids come from parcel.account_id or a multiple_matches result";
+  then recheck the account digits. A zip that is not 5 digits gets HTTP 400 "zip must
+  be 5 digits, such as 21202; a ZIP+4 such as 21202-1234 also works". A no-match
+  says nothing about the home or its assessment.
 
 ### 3. Relay the verdict, branch by branch
 
@@ -181,18 +200,20 @@ present.
 | `insufficient` | "Not enough similar homes to compare fairly." | No verdict either way. Relay `plain.body`, e.g. the State House's "We found only 14 homes similar enough (same reassessment group, similar size, lot, and age, same zip). An honest answer needs more; the official record link below is the next stop." With `BandSize` 0 it opens "We couldn't find any other homes similar enough" instead. The packet page says "We can't build an honest packet here". |
 
 The `insufficient` branch carries only `headline` and `body`. On the other three,
-more `plain` keys appear when they apply. As worded on 2026-09-28: `position` ("Out of
-237 similar homes, about 1 in 10 are assessed lower than this one and 9 in 10
-higher."); `level`, only when the group has enough recent sales ("As a group, these
-homes are assessed at about 80% of what they actually sell for (based on 20 recent
-sales)."); `phase_in`, when `taxable_now` is below `market_value` ("The assessment is
+more `plain` keys appear when they apply. As worded on 2026-09-29: `position` ("Out of
+152 similar homes, about 1 in 10 are assessed lower than this one and 9 in 10
+higher."); `level`, only when the group has at least 10 sales in the window ("As a
+group, these homes are assessed at about 97% of what they actually sell for (based on
+14 sales from 2024 through 2026)."; the years are `RatioFromYear` and `RatioToYear`);
+`phase_in`, when `taxable_now` is below `market_value` ("The assessment is
 still phasing in: increases spread over three years, so the taxable amount steps up
 again the next year or two even with no new assessment. Decreases apply
 immediately.").
 
-Zeros in `uniformity`: on the `insufficient` branch every number but `BandSize` reads
-0, meaning not computed. On the other branches, `MedianSalesRatio` and `COD` read 0
-"when RatioSales is below 10, meaning no ratio is published" (`tools/list`); `level`
+Zeros in `uniformity`: on the `insufficient` branch every number but `BandSize`,
+`RatioFromYear`, and `RatioToYear` reads 0, meaning not computed. On the other
+branches, `MedianSalesRatio` and `COD` read 0 "when RatioSales is below 10, meaning
+no ratio is published" (`tools/list`); `level`
 is then absent, and `RatioSales` still shows the small count, such as 8. `PctFMV` 0 on
 a fair, review, or elevated parcel is real: no similar home is assessed lower than
 this one. Set `market_value` beside `MedianFMV` only when `MedianFMV` is above 0.
@@ -205,7 +226,7 @@ within 20 years."
 
 ### 4. Appeal windows and where to file
 
-Relay the `appeals` block as the response words it. Observed 2026-09-28:
+Relay the `appeals` block as the response words it. Observed 2026-09-29:
 
 - `window_notice`: "within 45 days of the date on a reassessment notice (notices mail in late December)"
 - `window_petition`: "for the two years a home is not reassessed: a Petition for Review filed by the first working day after January 1"
@@ -219,7 +240,7 @@ The JSON gives only statewide rules. For "can I still appeal, and by when", fetc
 home:" paragraph. It works out, from the reassessment cycle, this home's last notice,
 when that 45-day window closed, and the next option. It offers a Petition for Review
 only in the two years the home is not reassessed; in the winter its next reassessment
-notice mails, it offers only that notice. As of 2026-09-28:
+notice mails, it offers only that notice. As of 2026-09-29:
 
 - The State House (`acct=020600002182004`, last reassessed January 2024): "For this
   home: This home's last reassessment notice mailed in late December 2023, so its
@@ -239,7 +260,7 @@ the 60 days count from the transfer, a date the service does not know.
 
 Take only that paragraph from the page; every number and the verdict come from the
 JSON. On an `insufficient` parcel with similar homes found, the page can still draw a
-similar-homes median and range that the JSON leaves at 0 (as of 2026-09-28 the State
+similar-homes median and range that the JSON leaves at 0 (as of 2026-09-29 the State
 House page showed "similar-homes median $758,600"). Never relay them.
 
 The page calls the three windows "all free to file". What follows a filing, verbatim
@@ -292,11 +313,12 @@ Every answer carries all four, taken from the response, not from memory:
 
 1. **Source**: Overassessed, from Maryland's SDAT assessment roll; the account id,
    county, and last reassessment.
-2. **Snapshot date**: the JSON has none. Quote the "Roll data as of <Month YYYY>" line
-   from the home page (https://overassessed.agentlookups.ai/), which shows it for any
-   branch, from the MCP server's `initialize` instructions, or from a fair, review, or
-   elevated packet (all three read "Roll data as of September 2026" on 2026-09-28); the
-   verdict page and the insufficient packet carry none. If you fetched none of them,
+2. **Snapshot date**: `roll.as_of`, the date the state last updated the roll
+   ("2026-09-04" on 2026-09-29), and `roll.pulled`, the date this copy was taken, when
+   present. The home page, the verdict page, every packet, and the MCP `initialize`
+   instructions word the month as "Roll data as of September 2026" (2026-09-29); the
+   instructions add "The state last updated the roll on September 4, 2026." When
+   `roll.overdue` is true, say this copy is more than 35 days old. If `roll` is null,
    "the roll refreshes monthly; checked <today's date>". Never "currently".
 3. **Coverage caveat**: both `honesty` sentences, `BandSize`, the sales count only when
    `plain.level` is present (that sentence carries it), and "not legal or tax advice".
@@ -314,7 +336,8 @@ Fair, review, or elevated:
 Assessed at $<market_value>, last reassessed <Month YYYY>; similar-homes median $<MedianFMV>.
 Appeal: <"For this home:" paragraph>. These dates are the service's estimate; the date on your notice and SDAT decide. File at <portal> or with <petition_pdf>; steps: <process>.
 Packet to print (only for review or elevated, or fair if asked): https://overassessed.agentlookups.ai/packet?acct=<account_id>
-Roll data as of <Month YYYY> (or: roll refreshes monthly; checked <date>).
+Roll data as of <Month YYYY>; the state last updated the roll on <roll.as_of>. <"This copy is more than 35 days old.", only if roll.overdue is true>
+(If roll is null: roll refreshes monthly; checked <date>.)
 "<honesty 1>" "<honesty 2>" Not legal or tax advice.
 ```
 
@@ -325,7 +348,8 @@ Insufficient (no position, median, or packet):
 <plain.body>
 Assessed at $<market_value>, last reassessed <Month YYYY>. Official record: https://sdat.dat.maryland.gov/RealProperty/
 Appeal: <"For this home:" paragraph>. These dates are the service's estimate; the date on your notice and SDAT decide. File at <portal> or with <petition_pdf>; steps: <process>.
-Roll data as of <Month YYYY> (or: roll refreshes monthly; checked <date>).
+Roll data as of <Month YYYY>; the state last updated the roll on <roll.as_of>. <"This copy is more than 35 days old.", only if roll.overdue is true>
+(If roll is null: roll refreshes monthly; checked <date>.)
 "<honesty 1>" "<honesty 2>" Not legal or tax advice.
 ```
 

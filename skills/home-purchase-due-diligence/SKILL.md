@@ -83,10 +83,11 @@ Response: `query` (the `Lat`, `Lon`, and `RadiusKM` actually searched, plus `mat
 
 Observed 2026-09-28 for the example: `superfund_sites` null; 1 TRI facility (reporting year 2024, 9.9 km); 6 enforcement-flagged facilities, the nearest 2.6 km; every dataset `as_of` 2026-09-05; no truncation.
 
-Guard the inputs yourself; do not count on the service to reject bad ones:
+The service answers bad input with an error, not a result (checked 2026-09-29; REST HTTP 400 with `error`, MCP `isError` with the same text). Fix the input and retry; an error is not a finding.
 
-- Keep `radius_km` at 50 or below (the default is 10), and read `query.RadiusKM` back from the response before you state the radius. On 2026-09-28 a request for 80 came back searched at 10, with no error.
-- Check lat/lon before calling: latitudes in the 50 states run from about 18 to 72, and the tool's schema expects a negative longitude. On 2026-09-28 impossible coordinates (latitude 139) and a flipped longitude sign both came back as ordinary responses with no records, which reads like a clean result. The address form avoids this; confirm `matched_address` is the buyer's house.
+- `radius_km` must be more than 0 and at most 50 (the default is 10). A request for 80 got "radius_km must be more than 0 and at most 50 (default 10); got 80". Read `query.RadiusKM` back from the response before you state the radius.
+- Latitude 139 got "lat must be between -90 and 90; got 139", and a flipped longitude sign got "lat/lon must be in the 50 states, DC, PR, VI, Guam, NMI or American Samoa; got 39.276032,76.805841". An address sent with lat/lon got "send either address or lat and lon, not both".
+- The coordinate check is a coarse box, not a border: a point in Tijuana, Mexico passed it and got San Diego records. The address form avoids this; confirm `matched_address` is the buyer's house.
 
 ### 2. Drinking water for the county
 
@@ -104,7 +105,7 @@ Response: up to the 10 largest matching `water_systems`, each with `pwsid`, `pop
 
 Observed 2026-09-28 for the example: 4 systems, no truncation. The largest, HOWARD COUNTY D.P.W. DISTRIBUTION (MD0130002, 286,158 served), had 0 health-based violations in 5 years; two small systems had 1 each, both resolved.
 
-Send `state` as the two-letter code and `county` without the word "County". On 2026-09-28, `state=Maryland` and `county=Howard County` each returned `water_systems: null`, the same as a county with no systems. If you get `null`, check the spelling in `query` before you relay anything.
+Send `state` as the two-letter code and `county` without the word "County". On 2026-09-29, `state=Maryland` got HTTP 400 with the error `state must be a two-letter code such as MD; got "Maryland"`, while `county=Howard County` returned `water_systems: null`, the same as a county with no systems. If you get `null`, check the spelling in `query` before you relay anything.
 
 ### 3. Due-diligence layers
 
@@ -132,7 +133,7 @@ MCP (endpoint `https://overassessed.agentlookups.ai/mcp`, tool `check_assessment
 {"name": "check_assessment", "arguments": {"address": "<STREET AS THE ROLL WRITES IT>", "zip": "<ZIP>"}}
 ```
 
-Response: the `parcel` record (with `account_id`), a `uniformity` block whose `Branch` is one of fair / review / elevated / insufficient, a `plain` block with ready-to-relay sentences, `appeals` with Maryland's windows and official filing links, and `honesty`. If several parcels share the address you get `multiple_matches` with account ids; re-query with `acct=<ACCOUNT_ID>`. An address that matches nothing returns `"error": "no parcel matched that address; include the zip, and write it as the assessment roll does (e.g. 1 STATE CIR)"` (HTTP 404 on REST; on MCP the same `error` field arrives in the tool result).
+Response: the `parcel` record (with `account_id`), a `uniformity` block whose `Branch` is one of fair / review / elevated / insufficient, a `plain` block with ready-to-relay sentences, `appeals` with Maryland's windows and official filing links, and `honesty`. A single match or `multiple_matches` also carries `roll`: `as_of`, the date the state last updated the roll (2026-09-04 on 2026-09-29), and `overdue`. If several parcels share the address you get `multiple_matches` with account ids; re-query with `acct=<ACCOUNT_ID>`. An address that matches nothing returns an `error` field (HTTP 404 on REST; on MCP the same `error` field arrives in the tool result). With a zip it reads "no parcel matched that address in that zip; write the street as the assessment roll does (e.g. 1 STATE CIR), with no unit, city or state, and check that the zip is the one the roll records for the parcel"; without one, "no parcel matched that address; include the zip, and write it as the assessment roll does (e.g. 1 STATE CIR)". A zip outside Maryland gets "that zip is outside Maryland; Overassessed covers Maryland only, from the state's own assessment roll (SDAT)".
 
 Observed 2026-09-28: `address=1 STATE CIR&zip=21401` (the Maryland State House) matched account 020600002182004 with `Branch` "insufficient" and `BandSize` 14, and `plain.headline` "Not enough similar homes to compare fairly."
 
@@ -181,9 +182,9 @@ Coverage before you promise anything: `GET https://contractors.agentlookups.ai/v
 
 ## Honesty rules (verbatim, relay these, do not override them)
 
-From GroundTruth (env.agentlookups.ai/llms.txt, fetched 2026-09-28):
+From GroundTruth (env.agentlookups.ai/llms.txt, fetched 2026-09-29):
 
-- "We publish records with dates and distances. Category scores are model estimates, not safety ratings."
+- "We publish records with dates and distances, never a safety score."
 - "Absence of records is NEVER a clean bill of health."
 - "Due-diligence layers return null where they cannot score; an honest no-data beats a made-up score, and a null is never coerced to a number."
 - "TRI figures are lawful self-reported releases; quantity is not toxicity."

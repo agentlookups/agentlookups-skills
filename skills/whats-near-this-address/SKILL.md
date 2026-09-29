@@ -11,11 +11,12 @@ metadata:
 Answer one question about one US place, such as "any Superfund sites near me" or
 "does my water system have violations", from GroundTruth
 (https://env.agentlookups.ai). It republishes four EPA datasets with names,
-distances, and dates. It is free during beta, with no account and no key; its
-llms.txt: "Currently free in beta, with no account required. Features and pricing
-may change." and "Currently no auth for reasonable rates; rate limits apply to
-automated clients." GroundTruth re-snapshots the EPA data monthly, around the 5th.
-Examples A to D were run live on 2026-09-28; A to C read the EPA snapshot dated
+distances, and dates. It is free during beta, with no account and no key; the
+shared front page (https://agentlookups.ai/) says "The services are in beta and
+currently free to use. Features, access and pricing may change as they develop."
+GroundTruth's llms.txt: "No auth for reasonable rates; we never challenge automated
+clients." GroundTruth re-snapshots the EPA data monthly, around the 5th.
+Examples A to D were run live on 2026-09-29; A to C read the EPA snapshot dated
 2026-09-05, and D's layer scores carry their own dates, one per layer. Later
 snapshots will change the counts, so check
 `https://env.agentlookups.ai/v1/coverage` for the current snapshot dates and trust
@@ -70,7 +71,11 @@ Not for:
 | Layer scores (schools, hazards, noise, walkability, crime, climate) | `due_diligence` `{"address": "..."}` | `https://env.agentlookups.ai/v1/diligence?address=<street, city, state>` |
 | Dataset counts and snapshot dates | none | `https://env.agentlookups.ai/v1/coverage` |
 
-`environment_near` and `due_diligence` take either `address` or `lat` and `lon`.
+`environment_near` and `due_diligence` take either `address` or `lat` and `lon`,
+not both: sending both gets the error "send either address or lat and lon, not
+both". `tools/list` marks all three tools read-only, with the titles "Find
+federal environmental records near an address", "Look up public water systems
+for an area", and "Score a property's due-diligence risk layers".
 MCP endpoint `https://env.agentlookups.ai/mcp`: Streamable HTTP, no auth; a plain
 POST of `tools/call` worked with no `initialize` step (headers
 `content-type: application/json` and `accept: application/json, text/event-stream`).
@@ -90,10 +95,13 @@ the REST equivalent is HTTP 400 with an `error` field.
    View city, CA, not for a specific property." An address the geocoder cannot
    place gets an error that begins "no match for" (REST: HTTP 400 `error`; MCP:
    `isError: true`, text in `content[0].text`); ask for the full address or pass
-   lat/lon. **Check any lat/lon yourself before you send it**: latitude first;
-   for the 50 states and DC, latitude lies between about 18 and 72 and longitude
-   is negative (except the far western Aleutians). Do not count on the service
-   to catch a bad pair (see the note after this list).
+   lat/lon. Send latitude first. The service rejects a pair it cannot place in
+   the US (REST HTTP 400, MCP `isError`): `lat=999&lon=-999` got "lat must be
+   between -90 and 90; got 999", a London point got "lat/lon must be in the 50
+   states, DC, PR, VI, Guam, NMI or American Samoa; got 51.5,-0.12", and a
+   swapped Baltimore pair added "(lat and lon look swapped)" (2026-09-29). Fix
+   the pair and retry; never read the error as a finding. The check is coarse (see
+   the note after this list).
 2. **Pick the call from the question.**
    - Superfund, factories, toxic chemicals, EPA violations near a place, school,
      or office: `environment_near`.
@@ -105,21 +113,19 @@ the REST equivalent is HTTP 400 with an `error` field.
      string and `no_coverage`); elsewhere send flood questions to FEMA's flood map
      (https://msc.fema.gov/portal/home).
 3. **Set the radius on purpose.** The default is 10 km (6.2 mi), the maximum 50.
-   Send a `radius_km` above 0 and at most 50, then read `query.RadiusKM` back from
-   the response and state that radius, not the one you asked for. On 2026-09-28
-   the service did not reject out-of-range values: `radius_km` 80, 51, 0, and -5
-   each came back with `RadiusKM` 10 (80 on both REST and MCP). If the user names
-   a distance, convert (1 mi = 1.609 km); for more than 50 km (31 mi), search
-   50 km and tell the user that is the limit.
+   A `radius_km` of 0 or less, or above 50, gets an error instead of a search
+   (2026-09-29, REST and MCP): "radius_km must be more than 0 and at most 50
+   (default 10); got 80". Read `query.RadiusKM` back from the response and state
+   that radius. If the user names a distance, convert (1 mi = 1.609 km); for more
+   than 50 km (31 mi), search 50 km and tell the user that is the limit.
 4. **Relay under the output contract.**
 
-Bad or foreign coordinates can look like a clean result. On 2026-09-28 a point
-outside the US (`lat=51.5&lon=-0.12`), an impossible one (`lat=999&lon=-999`),
-and a swapped Baltimore pair (`lat=-76.61&lon=39.29`) each returned HTTP 200
-from `/v1/near` with all three lists `null` (the swapped pair did the same on
-MCP), and `/v1/diligence` for the swapped pair returned placeholder scores
-(`superfund` 1). That is no coverage, not a finding: fix the coordinates, and say
-GroundTruth covers the US only.
+The coordinate check is a coarse box, not a border. On 2026-09-29 a point in
+Tijuana, Mexico (`lat=32.5149&lon=-117.0382`) passed it: `/v1/near` listed San
+Diego facilities 6.9 to 8.2 km away, and `/v1/diligence` returned layer scores
+(`school_quality` 0.09) for a point outside the US. A point the check lets
+through is not proof that it lies in the US: confirm the point is the property,
+and say GroundTruth covers the US only.
 
 ## Worked examples
 
@@ -182,8 +188,9 @@ with none carried no `recent_violations` field.
   this geography in the SDWA data. This does NOT mean the area lacks regulated
   water: check spelling, try county without city, or consult your water bill for
   the utility name."
-- Pass the two-letter state code. `state=Maryland&county=Howard` returned no
-  systems and that same `message`, not an error (2026-09-28); `state=md` worked.
+- Pass the two-letter state code. `state=Maryland&county=Howard` got HTTP 400
+  (MCP: `isError`) with the error `state must be a two-letter code such as MD;
+  got "Maryland"` (2026-09-29); `state=md` worked.
 - With violations: `https://env.agentlookups.ai/v1/water?state=MD&county=Baltimore+city`
   listed CITY OF BALTIMORE (MD0300002, 1600000 served) with 2 health-based
   violations in 5 years, 0 open: "TTHM", 2026-01-01 to 2026-03-31, status
@@ -211,7 +218,7 @@ the underlying grid reads 'safest' where the truth is 'no data' (feeds: SF,
 Oakland, Chicago)". `school_quality` had no caveat. MCP `due_diligence` for 500
 Castro St, Mountain View, CA scored every layer but `crime` and had no
 `no_coverage` block. The response's `coverage` string, verbatim as observed on
-2026-09-28 (read the live one in each response; it can change):
+2026-09-29 (read the live one in each response; it can change):
 "Superfund/toxic-release proximity: national (EPA NPL + TRI, all US). Other
 environmental layers (groundwater, flood/fire/quake zones, air, noise,
 walkability): CA/Bay Area. Schools: all 50 states and DC (2023-2025 results).
@@ -221,10 +228,10 @@ point."
 
 A relay of the school and crime layers for this address:
 
-> GroundTruth's school layer, built from nearby schools' available academic
-> results with closer schools weighted more, gives 0.892 on a 0 to 1 scale (1 is
-> favorable), data dated 2026-08-28. It does not identify the assigned school; ask
-> the district. GroundTruth has no crime data for this point. Its note: "no
+> GroundTruth's school layer, which scores the closest public schools compared
+> across states, gives 0.892 on a 0 to 1 scale (1 is favorable), data dated
+> 2026-08-28. It does not say which schools serve this address; ask the district.
+> GroundTruth has no crime data for this point. Its note: "no
 > incident feed for this location; the underlying grid reads 'safest' where the
 > truth is 'no data' (feeds: SF, Oakland, Chicago)".
 
@@ -289,22 +296,23 @@ has no `terms` or `dispute_url` field.
   "Other", resolved). Both observed 2026-09-28.
 - **Layer scores.** A layer in `no_coverage` has no data at that point: say so and
   quote its caveat (for `natural_hazards`, see the next bullet); never relay its
-  number. Never turn a null into a number. Relay caveats verbatim (the tool
-  description says so). Give each score with its layer name, its own `provenance`
+  number. Never turn a null into a number. Relay caveats verbatim; the tool
+  description says `caveats.<layer>` states the limits "the score alone does not
+  show". Give each score with its layer name, its own `provenance`
   date, and the source its caveat or the `coverage` string names
   (CalEnviroScreen, GAMA wells, gridMET); never label a layer score "EPA records".
   Never average layers, grade them, or call them safe or unsafe.
 - **School and crime layers.** Relay them when asked, as GroundTruth's source data
   with its own caveats, never as our view of a neighborhood: no "good schools",
   "safe area", or "rough block" in your own words. The GroundTruth front door
-  (https://env.agentlookups.ai/) describes them. `school_quality`: "Nearby schools’
-  available academic results, with closer schools weighted more. Inputs include
-  tests, graduation and college-readiness data where available. This does not
-  identify your assigned school." `crime`: "Compares reported-incident density with
-  other areas in the covered region. It is not your chance of experiencing crime."
-  Outside the crime feeds, `crime` is null and its caveat says why; quote it, and
-  never read the null as "safe". Check the `coverage` string for which places each
-  layer covers. For a real estate agent, fair-housing rules apply: forward the
+  (https://env.agentlookups.ai/) describes them (2026-09-29). `school_quality`:
+  "How the closest public schools score, compared fairly across states." and "Ask
+  the district which schools serve this address." `crime`: reported-incident
+  density only where a city publishes a feed; outside them the page says "Only
+  some cities publish the incident feeds we use (San Francisco, Oakland, Chicago);
+  this point is outside them." Outside the crime feeds, `crime` is null and its
+  caveat says why; quote it, and never read the null as "safe". Check the
+  `coverage` string for which places each layer covers. For a real estate agent, fair-housing rules apply: forward the
   source data with its attribution and caveats, and do not describe the
   neighborhood or its schools in your own words.
 - **Superfund score.** For a Superfund question, lead with the `environment_near`
@@ -320,9 +328,9 @@ has no `terms` or `dispute_url` field.
 
 ## Honesty rules (verbatim; relay them, never override them)
 
-From https://env.agentlookups.ai/llms.txt, fetched 2026-09-28:
+From https://env.agentlookups.ai/llms.txt, fetched 2026-09-29:
 
-- "We publish records with dates and distances. Category scores are model estimates, not safety ratings."
+- "We publish records with dates and distances, never a safety score."
 - "Absence of records is NEVER a clean bill of health."
 - "Due-diligence layers return null where they cannot score; an honest no-data
   beats a made-up score, and a null is never coerced to a number."

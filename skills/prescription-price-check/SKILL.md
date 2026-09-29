@@ -49,7 +49,7 @@ One tool. Pass the drug name and strength: `atorvastatin 20 mg`. Do not copy the
 
 MCP is Streamable HTTP, no auth; a plain POST of `tools/list` or `tools/call` worked without an initialize step. The tool returns the same JSON as REST, as text content and as `structuredContent`.
 
-For the current snapshot date and size, check `GET /v1/coverage` rather than trusting a figure here; on 2026-09-28 it reported `as_of` 2026-09-23 and 5,942 concepts. CMS publishes NADAC weekly (Wednesdays); the service checks daily and reindexes when a new file appears.
+For the current snapshot date and size, check `GET /v1/coverage` rather than trusting a figure here; on 2026-09-29 it reported `as_of` 2026-09-23 and 5,942 concepts, counts computed from the data (by class, by unit, `with_fair_cash_floor` 3,019, `brands_with_linked_generics` 453, `generic_equivalence` status counts, Medicare negotiated prices), and the same `freshness` list every price answer carries. CMS publishes NADAC weekly (Wednesdays); the service checks daily and reindexes when a new file appears.
 
 Pace the calls. The service says "rate limits apply", and one answer can take three or four calls (candidates, a retry, the match). On 2026-09-28 about 30 back-to-back calls drew an HTTP 429 "Too Many Requests" HTML page instead of JSON; the same day, calls two seconds apart did not. Space calls out; on a 429, wait a few seconds and retry once before telling the user anything about the drug.
 
@@ -59,13 +59,13 @@ Pace the calls. The service says "rate limits apply", and one answer can take th
 2. **Call** `drug_price` or `/v1/price` with name and strength. The response is a union on `result_type`: `match`, `candidates`, or `no_match`.
 3. **Handle the result.**
    - `match`: first confirm that `concept.description` names the same ingredient or ingredients, strength, and form as the label. The service can match a different drug (see "A match for the wrong drug" below). If it names a combination, another strength, or another form, do not answer from it: retry with name and strength only and pick from the candidates. Once it checks out, read it (next section) and answer.
-   - `candidates`: the query fits several drugs, strengths, or forms. The list is for choosing only. Show the `description` lines, ask which one is on the label, then call again with that description as the query (`atorvastatin 20 mg tablet`) and answer from the `match`; a query equal to a candidate's description returns that drug as a match. Quote no price from the list: its entries carry no `unit` and the response carries no date, and one list can mix per-ML pens with per-tablet entries (`q=ozempic` did). A slug does not work as a query: `q=synthroid-50-mcg-tablet` returned `no_match`, while `q=synthroid 50 mcg tablet` matched. The list shows at most 12 entries, generics first, then alphabetical. `candidates_total` says how many drugs matched, and when that is more than 12, `message` says the list was cut, for example: "The list was cut: 12 of 29 matching drugs are shown (generics first, then alphabetical). Adding a strength or form to the query narrows the list." As of 2026-09-28, `q=metformin` gave that message and listed 11 combination products and one extended-release form, no plain metformin tablet, while `q=metformin 500 mg` (12 of 12) listed "METFORMIN HCL 500 MG TABLET". If the user's drug is not in the list, add the strength or form and call again; never conclude it is missing.
+   - `candidates`: the query fits several drugs, strengths, or forms. The list is for choosing only. Show the `description` lines, ask which one is on the label, then call again with that description as the query (`atorvastatin 20 mg tablet`) and answer from the `match`; a query equal to a candidate's description returns that drug as a match. Quote no price from the list: its entries carry no `unit`, and one list can mix per-ML pens with per-tablet entries (`q=ozempic` listed three pens and three tablets on 2026-09-29). A slug does not work as a query: `q=synthroid-50-mcg-tablet` returned `no_match`, while `q=synthroid 50 mcg tablet` matched. The list shows at most 12 entries, generics first, then alphabetical. `candidates_total` says how many drugs matched, and when that is more than 12, `message` says the list was cut, for example: "The list was cut: 12 of 29 matching drugs are shown (generics first, then alphabetical). Adding a strength or form to the query narrows the list." As of 2026-09-29, `q=metformin` gave that message and listed 11 combination products and one extended-release form, no plain metformin tablet, while `q=metformin 500 mg` (12 of 12) listed "METFORMIN HCL 500 MG TABLET". If the user's drug is not in the list, add the strength or form and call again; never conclude it is missing.
    - `no_match`: usually a word the index spells another way, not a missing drug. Drop form and salt words (tablet, capsule, sodium, potassium, succinate, magnesium, calcium) and retry with name and strength before saying anything about coverage. Then check spelling: the index has no spelling tolerance, but a `no_match` can carry `did_you_mean`, a list of close drug names (`lipiter 20 mg` gave `["lipitor"]`, `atorvastatine` gave `["atorvastatin"]`). Many drug names look alike, so never swap one in silently: check it against the label, ask the user, and only then call again with that name and the strength. Try the generic name too. Only after those retries say the index does not carry it, and relay the `message`'s caveat: "This does NOT mean the drug does not exist or has no fair price: NADAC covers drugs with sufficient pharmacy survey data, and some brands, OTC products, and new drugs are absent." Prefer name and strength over the message's advice to try the name alone: a name alone matches every strength and form, but the list shows only 12 (`q=amlodipine` showed 12 of 37, all combination products), so it costs another call.
 4. **Answer, then give the counter scripts** (see "At the counter").
 
 ## Worked examples
 
-All run live on 2026-09-28 against the NADAC snapshot dated 2026-09-23 and the FDA Orange Book file dated 2026-09-11. Numbers move weekly; the shapes should not.
+All run live on 2026-09-29 against the NADAC snapshot dated 2026-09-23 and the FDA Orange Book file dated 2026-09-11. Numbers move weekly; the shapes should not. Every result, including `candidates` and `no_match`, also carried the `freshness` list (see "Reading a match").
 
 **A generic, exact match**
 
@@ -110,15 +110,15 @@ GET https://rx.agentlookups.ai/v1/price?q=januvia+100+mg
 {"name": "drug_price", "arguments": {"query": "januvia 100 mg"}}
 ```
 
-`match`, "JANUVIA 100 MG TABLET", `generic: false`: $10.55179 per tablet, fair cash $325.55 to $329.55 for 30. `generic_alternatives` holds one entry, "SITAGLIPTIN PHOSPHATE 100 MG TABLET", $3.77084 per tablet, fair cash $122.13 to $126.13 for 30, with its own `human_page`. `medicare_negotiated_prices` holds `{"drug": "JANUVIA", "price_30d": 113, "year": 2026, "note": "Medicare Part D negotiated price, effective 2026-01-01"}` plus a CMS `source_url`.
+`match`, "JANUVIA 100 MG TABLET", `generic: false`: $10.55179 per tablet, fair cash $325.55 to $329.55 for 30. `generic_alternatives` holds one entry, "SITAGLIPTIN PHOSPHATE 100 MG TABLET", $3.77084 per tablet, fair cash $122.13 to $126.13 for 30, with its own `human_page`. `medicare_negotiated_prices` holds `{"drug": "JANUVIA", "price_30d": 113, "year": 2026, "note": "Medicare Part D negotiated price, effective 2026-01-01"}` plus a CMS `source_url`. `cms_generic_price` gives the same $3.77084 per tablet (`effective_date` 2026-08-05) with a `statement` that opens "CMS's NADAC file prices the generic version of this drug at $3.77 per tablet (effective 2026-08-05)" and names SITAGLIPTIN PHOSPHATE 100 MG TABLET.
 
 **A brand with no linked generic**
 
 ```
-GET https://rx.agentlookups.ai/v1/price?q=diovan+160+mg+tablet
+GET https://rx.agentlookups.ai/v1/price?q=oracea+40+mg
 ```
 
-`match`, "DIOVAN 160 MG TABLET", no `generic_alternatives`, and a `generic_equivalence` block: `status` "listed_no_price", `ingredient` "valsartan", `index_generics` `["VALSARTAN 160 MG TABLET"]`, `as_of` "2026-09-11", and a `statement` that opens "The FDA Orange Book file we hold (dated 2026-09-11) lists a therapeutically equivalent generic (valsartan) for this product." `q=VALSARTAN 160 MG TABLET` then matched, $0.10604 per tablet, fair cash $12.18 to $16.18 for 30. `norvasc 5 mg tablet` named "AMLODIPINE BESYLATE 5 MG TAB" the same way; `jardiance 10 mg` gave "not_listed"; `synthroid 50 mcg tablet` gave "no_orange_book_match".
+`match`, "ORACEA 40 MG CAPSULE", no `generic_alternatives`, and a `generic_equivalence` block: `status` "listed_no_price", `ingredient` "doxycycline", `index_generics` `["DOXYCYCLINE IR-DR 40 MG CAP"]`, `as_of` "2026-09-11", and this `statement`: "The FDA Orange Book file we hold (dated 2026-09-11) lists a therapeutically equivalent generic (doxycycline) for this product. CMS's NADAC file gives a price for the generic version of this drug, and the generic in our index with that price, strength and ingredient is DOXYCYCLINE IR-DR 40 MG CAP; our match did not link it to this product, so it is not shown as an alternative." The result also carries `cms_generic_price` for that generic, $4.67065 per capsule. `q=DOXYCYCLINE IR-DR 40 MG CAP` then matched, fair cash $149.12 to $153.12 for 30. `edarbyclor 40-12.5 mg` and `astagraf xl 1 mg` gave "listed_no_price" with no `index_generics`; `jardiance 10 mg` and `cardura xl 4 mg` gave "not_listed"; `inderal xl 80 mg` gave "no_orange_book_match". Brands whose generic the service links carry `generic_alternatives` instead: `diovan 160 mg tablet` listed "VALSARTAN 160 MG TABLET" ($0.10604 per tablet, fair cash $12.18 to $16.18 for 30), `norvasc 5 mg tablet` "AMLODIPINE BESYLATE 5 MG TAB", and `synthroid 50 mcg tablet` "LEVOTHYROXINE 50 MCG TABLET".
 
 **Name only: candidates**
 
@@ -130,7 +130,7 @@ GET https://rx.agentlookups.ai/v1/price?q=atorvastatin
 {"name": "drug_price", "arguments": {"query": "atorvastatin"}}
 ```
 
-`candidates`, `candidates_total` 4, no `message`: four entries (10, 20, 40, 80 mg tablets), each with `description`, `generic`, `per_unit_usd`, `fair_cash_floor`, and `human_page`, but no `unit`. The response has no `nadac` or `provenance` block, so no date.
+`candidates`, `candidates_total` 4, no `message`: four entries (10, 20, 40, 80 mg tablets), each with `description`, `generic`, `per_unit_usd`, `fair_cash_floor`, and `human_page`, but no `unit`. The response has no `nadac` or `provenance` block; its `freshness` list gives the file dates.
 
 **No fair cash range: liquids, inhalers, patches**
 
@@ -147,7 +147,7 @@ The first: `match`, "AMOXICILLIN 400 MG/5 ML SUSP", $0.03963 per `unit` "ML", an
 GET https://rx.agentlookups.ai/v1/price?q=zzqxnotadrug
 ```
 
-`no_match`, with a `message` that opens "No drug matching this query is in our NADAC index." and says "some brands, OTC products, and new drugs are absent". This result carries `terms` and `dispute_url` but no `honesty` array and no `did_you_mean`.
+`no_match`, with a `message` that opens "No drug matching this query is in our NADAC index." and says "some brands, OTC products, and new drugs are absent". This result carries `terms`, `dispute_url`, and `freshness`, but no `honesty` array and no `did_you_mean`.
 
 ## Reading a match
 
@@ -158,10 +158,13 @@ GET https://rx.agentlookups.ai/v1/price?q=zzqxnotadrug
 - **`generic_alternatives`**: FDA Orange Book therapeutic equivalents, same ingredient, strength, and form, each priced. Say "an FDA-listed generic equivalent exists; ask your prescriber or pharmacist", never "switch to it" and never "it is just as good". A generic drug's own match carries neither this block nor `generic_equivalence`.
 - **`generic_equivalence`**: on a brand-name match with no `generic_alternatives`, a dated statement of what the FDA Orange Book file shows. Its `as_of` is the Orange Book file date, not the NADAC date. Relay its `statement` with that source and date, and read `status`:
   - `not_listed`: the Orange Book file lists no therapeutically equivalent generic for this product. For `jardiance 10 mg`: "No FDA therapeutically equivalent generic is listed for this product in the FDA Orange Book file we hold (dated 2026-09-11)."
-  - `listed_no_price`: it lists one, named in `ingredient`, but the match linked no price. Each name in `index_generics`, when present, can be searched as is; price it and frame it like a `generic_alternatives` entry. Without `index_generics`, relay the statement alone; for `eliquis 5 mg tablet` it ends "A listing does not show that the generic is sold in pharmacies now."
-  - `otc_generic_listed`: an OTC brand with a current OTC generic, named in `ingredient`. The FDA does not rate OTC products for therapeutic equivalence, so never call that generic an equivalent. `index_generics` names can be searched as is.
+  - `listed_no_price`: it lists one, named in `ingredient`, but the match linked no price. Each name in `index_generics`, when present, can be searched as is to price it. Relay the statement as written: when it names that generic through CMS's price (Oracea's does), the pairing is CMS's, so call it the generic CMS pairs with the brand, not an FDA-rated equivalent. Without `index_generics`, relay the statement alone; for `eliquis 5 mg tablet` it ends "A listing does not show that the generic is sold in pharmacies now."
+  - `otc_generic_listed`: an OTC brand with a current OTC generic, named in `ingredient` (`sklice` names ivermectin and "IVERMECTIN 0.5% LOTION"). The FDA does not rate OTC products for therapeutic equivalence, so never call that generic an equivalent. `index_generics` names can be searched as is.
   - `no_orange_book_match` or `not_checked`: says nothing either way about generics. For `novolog 100 unit/ml vial` the statement adds "The Orange Book does not cover biologics such as insulins." Send the user to the pharmacist or prescriber.
 - **`medicare_negotiated_prices`**: the negotiated price for a 30-day supply (`price_30d`), with year and CMS source. The methodology page: "They apply to Medicare Part D coverage of the listed drugs." Relay it to someone on Part D; never present it as a cash price anyone can ask for. It is not what the enrollee pays: their Part D plan sets their copay, so send them to the plan or the pharmacist for that number, and never say "you should pay $X" from this field. Never set it beside `fair_cash_floor` either; one is a 30-day supply, the other 30 units (`q=eliquis+5+mg+tablet` gave $231 and $174.63 to $178.63). It can list related products: `q=eliquis+5+mg+tablet` returned two rows (ELIQUIS and ELIQUIS SPRINKLE, both $231), and `q=novolog+100+unit%2Fml+vial` six (NovoLog and Fiasp names, all $119).
+- **`cms_generic_price`**: on a brand-name match, CMS's NADAC figure for the corresponding generic: `per_unit_usd` and `unit`, `effective_date`, `as_of`, a `fair_cash_floor` where a fill quantity applies, `source` "CMS NADAC", and a `statement`. It names the generic (`description`, `human_page`) only when exactly one generic in the index has that price, strength and ingredient; `synthroid 50 mcg tablet` got "No single generic drug in our index has that price, strength and ingredient, so none is named here." Relay the statement as written; it says "CMS pairs this figure with the brand; it is not an FDA equivalence rating." Never present it as a price the user can get, or as a reason to switch.
+- **`freshness`**: on every result, one entry per source (`nadac`, `orangebook`, `mfp`, `purplebook`) with `as_of` (the publisher's date on the file in use), `checked` (the service's newest successful fetch), `expected` (weekly, monthly or irregular), and `stale`. When `stale` is true, relay its `statement`. On 2026-09-29 all four read `stale: false`, and `purplebook` had no `as_of` or `checked`; the tool description says "A source we have not fetched yet has no as_of or checked."
+- **`biosimilars`, `reference_product`**: the tool description lists these FDA Purple Book fields for biologics, but none appeared on 2026-09-29 (`lantus 100 unit/ml vial`, `humira pen 40 mg/0.8 ml`, and the biosimilar `semglee (yfgn) 100 unit/ml pen` all matched without them), while the Purple Book was not yet fetched. If one appears, relay its statement as written, and never suggest a switch.
 - **`concept.otc: true`** marks an over-the-counter product (`loratadine 10 mg tablet`).
 
 ## At the counter
@@ -179,7 +182,7 @@ If the user asks where else to look, the service's explainer (https://rx.agentlo
 
 ## Honesty rules (verbatim; relay them, never override)
 
-From https://rx.agentlookups.ai/llms.txt, fetched 2026-09-28:
+From https://rx.agentlookups.ai/llms.txt, fetched 2026-09-29:
 
 - "NADAC is what pharmacies PAY to acquire a drug: a benchmark, not a price anyone owes."
 - "Fair-cash figures are estimates (acquisition + $9-13 dispensing fee band)."
@@ -203,9 +206,9 @@ When a response's wording differs from the above, use the response's.
 
 Every price answer carries all four, taken from the response:
 
-1. **Source**: "CMS NADAC" for acquisition cost and the fair cash range, "FDA Orange Book" for generic equivalents and `generic_equivalence`, "CMS negotiated prices" for Medicare. Not just "CounterScript".
-2. **Snapshot date**: `nadac.as_of` (or `provenance.as_of`) from the `match`, stated as "as of <that date>" (2026-09-23 for the snapshot these examples used), never "currently" or "today". A `generic_equivalence` statement carries its own Orange Book `as_of`; give that date with it. A `candidates` or `no_match` response carries no date: quote no price from a candidates list until the follow-up `match`, and date a no_match with `as_of` from `GET https://rx.agentlookups.ai/v1/coverage`.
-3. **Coverage caveat**: a benchmark, not a price anyone owes; a copay may be lower; no range when `fair_cash_floor` is absent; the Medicare price is Part D only and is not the enrollee's copay; a no_match, and a `generic_equivalence` of "no_orange_book_match" or "not_checked", each prove nothing.
+1. **Source**: "CMS NADAC" for acquisition cost, the fair cash range, and `cms_generic_price`, "FDA Orange Book" for generic equivalents and `generic_equivalence`, "CMS negotiated prices" for Medicare. Not just "CounterScript".
+2. **Snapshot date**: `nadac.as_of` (or `provenance.as_of`) from the `match`, stated as "as of <that date>" (2026-09-23 for the snapshot these examples used), never "currently" or "today". A `generic_equivalence` statement carries its own Orange Book `as_of`; give that date with it. A `candidates` or `no_match` response has no `nadac` block: date it with the `nadac` entry's `as_of` in its `freshness` list, and quote no price from a candidates list until the follow-up `match`.
+3. **Coverage caveat**: a benchmark, not a price anyone owes; a copay may be lower; no range when `fair_cash_floor` is absent; the Medicare price is Part D only and is not the enrollee's copay; `cms_generic_price` is not an FDA equivalence rating; any `freshness` entry with `stale` true, in its own words; a no_match, and a `generic_equivalence` of "no_orange_book_match" or "not_checked", each prove nothing.
 4. **Link**: the drug page at `concept.human_page` (with the pharmacist card), and `source_url` for a Medicare figure. For a number that looks wrong: `dispute_url` (https://rx.agentlookups.ai/dispute/) or corrections@agentlookups.ai.
 
 ## What this cannot answer, and where to send people
