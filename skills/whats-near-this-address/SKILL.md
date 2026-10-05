@@ -68,14 +68,14 @@ Not for:
 |---|---|---|
 | Superfund sites, TRI factories, EPA-flagged facilities near a place | `environment_near` `{"address": "...", "radius_km": 10}` | `https://env.agentlookups.ai/v1/near?address=<street, city, state>&radius_km=10` |
 | Public water systems and violations | `drinking_water` `{"state": "MD", "county": "Howard"}` (`state` required, as a two-letter code; `county` and/or `city` to narrow) | `https://env.agentlookups.ai/v1/water?state=MD&county=Howard` |
-| Layer scores (schools, hazards, noise, walkability, crime, climate) | `due_diligence` `{"address": "..."}` | `https://env.agentlookups.ai/v1/diligence?address=<street, city, state>` |
+| Layer scores (schools, hazards, noise, walkability, crime, climate) | `location_scores` `{"address": "..."}` | `https://env.agentlookups.ai/v1/scores?address=<street, city, state>` |
 | Dataset counts and snapshot dates | none | `https://env.agentlookups.ai/v1/coverage` |
 
-`environment_near` and `due_diligence` take either `address` or `lat` and `lon`,
+`environment_near` and `location_scores` take either `address` or `lat` and `lon`,
 not both: sending both gets the error "send either address or lat and lon, not
 both". `tools/list` marks all three tools read-only, with the titles "Find
 federal environmental records near an address", "Look up public water systems
-for an area", and "Score a property's due-diligence risk layers".
+for an area", and "Score a location's public-record layers".
 MCP endpoint `https://env.agentlookups.ai/mcp`: Streamable HTTP, no auth; a plain
 POST of `tools/call` worked with no `initialize` step (headers
 `content-type: application/json` and `accept: application/json, text/event-stream`).
@@ -88,7 +88,7 @@ the REST equivalent is HTTP 400 with an `error` field.
 
 1. **Get a full street address with city and state**, or lat/lon. Check
    `matched_address` (under `query` for `environment_near`, at the top level for
-   `due_diligence`) against what the user meant; for a street address the
+   `location_scores`) against what the user meant; for a street address the
    `honesty` text says "geocoding is approximate". A lat/lon query has no
    `matched_address`. A city alone (`address=Mountain+View,+CA`) works, but the
    response then says: "These results are for the geographic center of Mountain
@@ -108,7 +108,7 @@ the REST equivalent is HTTP 400 with an `error` field.
    - "My water": ask for the utility name on the water bill, then call
      `drinking_water` with the state and the county or city.
    - School quality, flood/fire/quake zones, noise, walkability, crime, climate:
-     `due_diligence`, read under its own rules below. On 2026-09-28 flood/fire/quake
+     `location_scores`, read under its own rules below. On 2026-09-28 flood/fire/quake
      data existed only for parts of California (check the response's `coverage`
      string and `no_coverage`); elsewhere send flood questions to FEMA's flood map
      (https://msc.fema.gov/portal/home).
@@ -122,7 +122,7 @@ the REST equivalent is HTTP 400 with an `error` field.
 
 The coordinate check is a coarse box, not a border. On 2026-09-29 a point in
 Tijuana, Mexico (`lat=32.5149&lon=-117.0382`) passed it: `/v1/near` listed San
-Diego facilities 6.9 to 8.2 km away, and `/v1/diligence` returned layer scores
+Diego facilities 6.9 to 8.2 km away, and `/v1/scores` returned layer scores
 (`school_quality` 0.09) for a point outside the US. A point the check lets
 through is not proof that it lies in the US: confirm the point is the property,
 and say GroundTruth covers the US only.
@@ -206,7 +206,7 @@ below). If it is not listed, say so; that is not a finding about the utility.
 ### D. Layer scores, only when asked
 
 ```
-GET https://env.agentlookups.ai/v1/diligence?address=3430+Court+House+Dr,+Ellicott+City,+MD+21043
+GET https://env.agentlookups.ai/v1/scores?address=3430+Court+House+Dr,+Ellicott+City,+MD+21043
 ```
 
 Returned `scores` with `school_quality` 0.892, `superfund` 1, `pleasant_days`
@@ -215,7 +215,7 @@ listed in `no_coverage` with caveats such as "0.5 is this layer's outside-covera
 sentinel (CalEnviroScreen, CA only); treat as no-data"; `crime`, `highway_noise`,
 and `walkability` null. The `crime` caveat: "no incident feed for this location;
 the underlying grid reads 'safest' where the truth is 'no data' (feeds: SF,
-Oakland, Chicago)". `school_quality` had no caveat. MCP `due_diligence` for 500
+Oakland, Chicago)". `school_quality` had no caveat. MCP `location_scores` for 500
 Castro St, Mountain View, CA scored every layer but `crime` and had no
 `no_coverage` block. The response's `coverage` string, verbatim as observed on
 2026-09-29 (read the live one in each response; it can change):
@@ -354,7 +354,7 @@ From the response `honesty` fields, same date:
   your actual utility; confirm there." / "Absence of records is NEVER a clean
   bill of health: datasets have coverage gaps, reporting thresholds, and
   publication lag."
-- `due_diligence`: "Layer scores summarize public datasets with known coverage gaps.
+- `location_scores`: "Layer scores summarize public datasets with known coverage gaps.
   Never a safety assessment; absence of adverse signals is not a clean bill of health."
 
 When a response's wording differs from the above, use the response's.
@@ -374,7 +374,7 @@ Every answer carries all of:
    it), never "EPA records".
 3. **Snapshot date**: for `environment_near` and `drinking_water`, the `as_of` in
    this response's `provenance`, said as "EPA records as of <as_of>", never
-   "currently". For `due_diligence`, each score with its own layer date,
+   "currently". For `location_scores`, each score with its own layer date,
    `provenance.<layer>`.
 4. **Coverage caveat** in the answer itself: the radius used, any `truncation`
    note, the absence rule, approximate water matching, any `no_coverage` layer,

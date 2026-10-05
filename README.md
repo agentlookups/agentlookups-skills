@@ -76,7 +76,7 @@ beta.
 | --- | --- | --- | --- |
 | `plumbline` | Plumbline | `https://contractors.agentlookups.ai/mcp` | `check_contractor` |
 | `counterscript` | CounterScript | `https://rx.agentlookups.ai/mcp` | `drug_price` |
-| `groundtruth` | GroundTruth | `https://env.agentlookups.ai/mcp` | `environment_near`, `drinking_water`, `due_diligence` |
+| `groundtruth` | GroundTruth | `https://env.agentlookups.ai/mcp` | `environment_near`, `drinking_water`, `location_scores`, `broadband_availability` |
 | `overassessed` | Overassessed | `https://overassessed.agentlookups.ai/mcp` | `check_assessment` |
 | `groundrules` | GroundRules | `https://law.agentlookups.ai/mcp` | `law_for_location`, `law_search`, `law_get_section`, `law_coverage` |
 

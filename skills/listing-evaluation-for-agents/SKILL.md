@@ -46,7 +46,7 @@ reports), or anything outside the US.
 
 | Question | Service | Base | MCP |
 | --- | --- | --- | --- |
-| Federal environmental records near the address | GroundTruth | https://env.agentlookups.ai | POST /mcp, tools: environment_near, drinking_water, due_diligence |
+| Federal environmental records near the address | GroundTruth | https://env.agentlookups.ai | POST /mcp, tools: environment_near, drinking_water, location_scores |
 | Drinking-water systems and violations | GroundTruth | https://env.agentlookups.ai | same |
 | Is this Maryland assessment fair | Overassessed | https://overassessed.agentlookups.ai | POST /mcp, tool: check_assessment |
 | Is this contractor licensed | Plumbline | https://contractors.agentlookups.ai | POST /mcp, tool: check_contractor |
@@ -125,7 +125,7 @@ health-based violations in five years (SDWA as_of 2026-09-05).
 ### 3. Optional context layers: schools, hazards, crime and more
 
 ```
-GET https://env.agentlookups.ai/v1/diligence?address=3430+Court+House+Dr,+Ellicott+City,+MD+21043
+GET https://env.agentlookups.ai/v1/scores?address=3430+Court+House+Dr,+Ellicott+City,+MD+21043
 ```
 
 Returns 0-to-1 scores (1.0 favorable) per layer, such as superfund,
@@ -144,7 +144,7 @@ call, since coverage changes. Before relaying anything:
   its attribution and caveats, and not describe neighborhoods or schools
   themselves.
 - For the schools behind a school_quality score, call
-  /v1/diligence/detail/school_quality?lat=<lat>&lon=<lon> with the lat
+  /v1/scores/detail/school_quality?lat=<lat>&lon=<lon> with the lat
   and lon from the response's query block. It lists nearby schools with
   level, distance_miles, NCES id (ncessch), and each school's
   quality_score. The detail carries no provenance date of its own; use
@@ -286,7 +286,7 @@ Accept: application/json, text/event-stream
 ```
 POST https://env.agentlookups.ai/mcp
 
-{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"due_diligence","arguments":{"address":"3430 Court House Dr, Ellicott City, MD 21043"}}}
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"location_scores","arguments":{"address":"3430 Court House Dr, Ellicott City, MD 21043"}}}
 ```
 
 ```
@@ -296,7 +296,7 @@ POST https://overassessed.agentlookups.ai/mcp
 ```
 
 environment_near takes {address | lat+lon, radius_km}; drinking_water
-takes {state, county, city}; due_diligence takes {address | lat+lon};
+takes {state, county, city}; location_scores takes {address | lat+lon};
 check_contractor takes {name | license | entity_id, jurisdiction, city,
 offset}; check_assessment takes {address, zip, acct}. Two-letter state
 codes work in every tool, and drinking_water needs one.

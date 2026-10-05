@@ -62,14 +62,14 @@ Not for:
 |---|---|---|
 | What environmental records are near this address? | GroundTruth | `GET env.agentlookups.ai/v1/near` |
 | Any drinking water violations here? | GroundTruth | `GET env.agentlookups.ai/v1/water` |
-| School, crime, and other layer scores, with coverage caveats | GroundTruth | `GET env.agentlookups.ai/v1/diligence` |
+| School, crime, and other layer scores, with coverage caveats | GroundTruth | `GET env.agentlookups.ai/v1/scores` |
 | Is this contractor licensed (before repairs)? | Plumbline | `GET contractors.agentlookups.ai/v1/check` |
 | Is my Maryland rental over-assessed? (landlord) | Overassessed | `GET overassessed.agentlookups.ai/v1/check` |
 | Deposit, notice, or entry rules for this address | GroundRules | MCP `law_for_location`, `law_search`, `law_get_section`; depth in `find-the-law` |
 
 MCP endpoints (Streamable HTTP, no auth; a bare `tools/call` without `initialize`
 worked on all four on 2026-09-28): `https://env.agentlookups.ai/mcp` (tools
-`environment_near`, `drinking_water`, `due_diligence`),
+`environment_near`, `drinking_water`, `location_scores`),
 `https://contractors.agentlookups.ai/mcp` (tool `check_contractor`),
 `https://overassessed.agentlookups.ai/mcp` (tool `check_assessment`),
 `https://law.agentlookups.ai/mcp` (tools `law_for_location`, `law_search`,
@@ -165,10 +165,10 @@ their water bill names their actual utility.
 ### 3. School, crime, and other layer scores (GroundTruth diligence)
 
 ```
-GET https://env.agentlookups.ai/v1/diligence?address=3430+Court+House+Dr,+Ellicott+City,+MD+21043
+GET https://env.agentlookups.ai/v1/scores?address=3430+Court+House+Dr,+Ellicott+City,+MD+21043
 ```
 
-MCP tool `due_diligence`, arguments `{"address": "3430 Court House Dr, Ellicott
+MCP tool `location_scores`, arguments `{"address": "3430 Court House Dr, Ellicott
 City, MD 21043"}` (or `lat`/`lon`; check them yourself as in step 1). Returns
 `scores` from 0 to 1 (1.0 favorable) for `air_quality`, `crime`, `groundwater`,
 `highway_noise`, `natural_hazards`, `pleasant_days`, `school_quality`, `superfund`,
