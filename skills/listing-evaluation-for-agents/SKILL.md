@@ -164,16 +164,20 @@ as no-data".
 GET https://overassessed.agentlookups.ai/v1/check?address=<STREET AS THE ROLL WRITES IT>&zip=<ZIP>
 ```
 
-Write the street the way the roll does (number and street name, no
-city, no unit), and include the zip. An error reading "no parcel matched
-that address in that zip; write the street as the assessment roll does
-(e.g. 1 STATE CIR), with no unit, city or state, and check that the zip
-is the one the roll records for the parcel" (HTTP 404 over REST, an
+Write the street the way the roll does (number and street name, any
+unit after it), and include the zip; the town and MD may go in the
+address too. An error reading "no parcel matched that address in that
+zip; write the street as the assessment roll does (e.g. 1 STATE CIR),
+with any unit after it (100 HARBORVIEW DR UNIT 204), and check that the
+zip is the one the roll records for the parcel" (HTTP 404 over REST, an
 error field over MCP) means rewrite the street or check the zip, not
-that the parcel is missing. As of 2026-09-29 the example office, sent as
+that the parcel is missing. As of 2026-10-27 the example office, sent as
 3430 COURT HOUSE DR with zip 21043, returned that error; the Maryland
 State House, 1 STATE CIR with zip 21401, matched account
-020600002182004. A zip outside Maryland gets "that zip is outside
+020600002182004. A street with no Maryland zip, city, county or state
+gets HTTP 400 "Overassessed covers Maryland only; add the zip, or the
+Maryland city or county, to the street (e.g. 1 STATE CIR, ANNAPOLIS or
+zip 21401), so the match stays in Maryland". A zip outside Maryland gets "that zip is outside
 Maryland; Overassessed covers Maryland only, from the state's own
 assessment roll (SDAT)".
 
@@ -181,7 +185,7 @@ Returns the SDAT parcel record (with parcel.account_id), a uniformity
 analysis with a verdict branch (fair, review, elevated, or
 insufficient), a plain-language verdict, Maryland's appeal windows with
 official filing links, honesty notes, and a roll object whose as_of is
-the date the state last updated the roll (2026-09-04 on 2026-09-29);
+the date the state last updated the roll (2026-10-06 on 2026-10-27);
 give that date with the verdict. The API returns HTTP 300 with
 multiple_matches when several parcels share an address; re-query with
 acct=<ACCOUNT_ID>.

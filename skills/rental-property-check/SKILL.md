@@ -272,12 +272,13 @@ MCP equivalent:
 {"name": "check_assessment", "arguments": {"address": "<STREET AS THE ROLL WRITES IT>", "zip": "<ZIP>"}}
 ```
 
-Address goes as the roll writes it (street only, no city, no unit numbers); zip
-recommended. Returns `parcel` (with `account_id`), a `uniformity` block with a
+Address goes as the roll writes it (the street, any unit after it), then the zip,
+or the Maryland town; with no Maryland zip, city, county or state it gets HTTP 400
+and an error asking for one. Returns `parcel` (with `account_id`), a `uniformity` block with a
 `Branch` of `fair` / `review` / `elevated` / `insufficient`, a `plain` verdict
 (`headline` and `body`), `appeals` (Maryland's windows with official filing links;
 relay the `window_*` strings as written), `honesty`, and `roll`, whose `as_of` is
-the date the state last updated the roll (2026-09-04, observed 2026-09-29); give
+the date the state last updated the roll (2026-10-06, observed 2026-10-27); give
 that date with the verdict. HTTP 300 with `multiple_matches` means several parcels
 share the address; re-query with `acct=<ACCOUNT_ID>`.
 
