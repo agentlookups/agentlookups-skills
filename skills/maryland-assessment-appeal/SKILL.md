@@ -17,7 +17,9 @@ names and takes no name search. Every example below was rerun live on 2026-10-27
 returning the shape shown, unless it carries an earlier date. The roll refreshes
 monthly, so numbers can drift. Normal use is a few lookups per question.
 Its docs say "Rate limits apply."; a burst of 30 parallel calls drew HTTP 429 on 9 of
-them (2026-09-28), so slow down if you see it.
+them (2026-09-28), so slow down if you see it. Since 2026-10-27 a 429 is JSON (an
+`error` sentence and `retry_after_seconds` 1) with a `Retry-After: 1` header: wait that
+long before the next call.
 
 This skill covers the assessment question alone, whoever asks it. If the user wants
 the full set of checks on a house they are buying, renting, or listing, use
@@ -90,7 +92,8 @@ described by `tools/list` as (2026-10-27): `address` "Maryland street address in
 form the roll uses (e.g. 1 STATE CIR), with any unit after the street (100 HARBORVIEW
 DR UNIT 204), followed by its Maryland city or county, the state, or the zip (e.g. 1
 STATE CIR, ANNAPOLIS, MD 21401); an address with no Maryland zip, city, county or
-state, here or in the zip input, is not matched"; `zip` "5-digit zip; a ZIP+4 is read
+state, here or in the zip input, is not matched. An SDAT account id sent here alone
+(0304121302 001, 160500305131) is read as acct"; `zip` "5-digit zip; a ZIP+4 is read
 as its first five digits, and a whole JSON number up to 99999 is read as a zip with
 its leading zeros restored (1234 is 01234). Optional when the address carries a
 Maryland zip, city, county or state; a zip here takes precedence over one in the
@@ -98,9 +101,11 @@ address. The same street address occurs in several Maryland towns, and a zip nar
 the match"; `acct` "SDAT account id as returned in parcel.account_id or in a
 multiple_matches result: letters and digits (e.g. 020600002182004), with one space
 before the lot in Baltimore City (e.g. 0304121302 001); spaces in it are ignored, so
-0304121302001 reads the same; when present it takes precedence over address". Send
-`acct` as a JSON string: a number is dropped, and the call then gets the no-input
-error below. A bare `tools/call` works without `initialize`:
+0304121302001 reads the same; when present it takes precedence over address. A JSON
+number is read as its digits, or with the leading zero a number cannot hold when that
+is the id on the roll; a number that names no single parcel is an error asking for the
+id as a string". Send `acct` as a JSON string all the same: a number cannot carry
+Baltimore City's space. A bare `tools/call` works without `initialize`:
 
 ```
 curl -sS -X POST https://overassessed.agentlookups.ai/mcp \
@@ -109,11 +114,11 @@ curl -sS -X POST https://overassessed.agentlookups.ai/mcp \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"check_assessment","arguments":{"address":"1 STATE CIR","zip":"21401"}}}'
 ```
 
-The result holds the REST JSON twice, in `content[0].text` and `structuredContent`.
-`isError` stays `false` even on a no-match or a multiple match; look for an `error` or
-`multiple_matches` key instead. With no `address` and no `acct`, the tool returns
-`isError` `true` and only the text "provide address (plus zip), or acct from a prior
-multiple_matches result".
+A result (one parcel, or a `multiple_matches` list) holds the REST JSON twice, in
+`content[0].text` and `structuredContent`, with `isError` `false`. Since 2026-10-27 a
+refusal or a no-match returns `isError` `true` and only the error sentence as text, the
+one REST puts in its `error` field; with no `address` and no `acct` that is "provide
+address (plus zip), or acct from a prior multiple_matches result".
 
 ## Workflow
 
@@ -124,8 +129,10 @@ city or county, in the address or with the zip as its own field. Observed: case,
 periods, and "Street" vs "ST" do not matter ("1 State Circle" with zip 21401
 matched); the whole line `100 Holliday St, Baltimore, MD 21202` matched, and so did
 `101 N COURT ST, FREDERICK` with no zip. A street with no Maryland zip, city, county
-or state gets HTTP 400 (step 2); MD alone searches the whole state. A direction word
-the roll leaves out gives a no-match: Baltimore City Hall is `100 HOLLIDAY ST` on the
+or state gets HTTP 400 (step 2); MD alone searches the whole state. Spelled-out
+directions and street types read as the roll's short forms (`4620 North Park Ave` with
+zip 20815 finds 4620 N PARK AVE), and an account number from the notice, typed alone as
+the address, finds its parcel. A direction word the roll leaves out gives a no-match: Baltimore City Hall is `100 HOLLIDAY ST` on the
 roll, and `100 N HOLLIDAY ST` did not match. If a town misses, try the zip: the roll
 may record the parcel under another town name. When stuck, ask the user to find the home
 in SDAT's own search (https://sdat.dat.maryland.gov/RealProperty/) in a browser and
@@ -226,18 +233,23 @@ present.
 
 | `Branch` | `plain.headline`, verbatim | Then |
 |---|---|---|
-| `fair` | "This assessment sits in the normal range for similar homes." | Say so plainly. The packet page is titled "Assessment comparison sheet". |
+| `fair` | "This assessment sits in the normal range for similar homes."; below the 25th percentile "This assessment is on the low side for similar homes.", below the 10th "This assessment is lower than almost all similar homes." | Say so plainly. The packet page is titled "Assessment comparison sheet". |
 | `review` | "This assessment is on the high side for similar homes: worth a closer look." | Relay the windows (step 4) and the packet ("Appeal evidence packet"). Filing is the user's call. |
 | `elevated` | "This assessment is higher than almost all similar homes." | Same as review. |
 | `insufficient` | "Not enough similar homes to compare fairly." | No verdict either way. Relay `plain.body`, e.g. Frederick City Hall's "We found only 2 homes similar enough (same reassessment group, similar size, lot, and age, same zip). An honest answer needs more; the official record link below is the next stop." With `BandSize` 0 it opens "We couldn't find any other homes similar enough" instead, and a skipped test drops out of the parenthesis ("similar size and lot" when year built was not compared). The packet page says "We can't build an honest packet here". |
 
 The `insufficient` branch carries `headline` and `body`, plus `not_compared` when a
 test was skipped. On the other three, more `plain` keys appear when they apply. As
-worded on 2026-10-27: `position` ("Out of 325 similar homes, about 2 in 10 are
-assessed lower than this one and 8 in 10 higher."); `level`, only when the group has
-at least 10 sales in the window ("As a group, these homes are assessed at about 94% of
-what they actually sell for (based on 42 sales from 2024 through 2026)."; the years
-are `RatioFromYear` and `RatioToYear`); `phase_in`, when `taxable_now` is below
+worded on 2026-10-27: `position` ("Out of 1,196 similar homes, about 5 in 10 are
+assessed lower than this one and 5 in 10 higher."); `level`, only when the group has
+at least 10 open-market sales of a single home in the window ("As a group, these homes
+are assessed at about 93% of what they actually sell for (based on 111 open-market
+sales of a single home from 2024 through 2026)."; the years are `RatioFromYear` and
+`RatioToYear`; foreclosures, gifts, auctions, multi-parcel and vacant-lot sales are
+left out); `size`, when a high or low position comes mostly from the home's size
+("Much of this is size: this home is larger than about 7 in 10 of them, and per square
+foot its assessment is higher than about 5 in 10.", 11701 Berwick Rd 20904, which reads
+"on the high side"; relay it, since it bears on whether an appeal is worth it); `phase_in`, when `taxable_now` is below
 `market_value` ("The assessment is still phasing in: increases spread over three
 years, so the taxable amount steps up again the next year or two even with no new
 assessment. Decreases apply immediately."); `not_compared`, when the roll records no
